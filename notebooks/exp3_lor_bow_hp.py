@@ -140,6 +140,8 @@ with mlflow.start_run():
     mlflow.log_params(best_params)
     mlflow.log_metric("best_score", best_score)
     
+
+    
     print(f"Best Params: {best_params}")
     print(f"Best F1 Score: {best_score}")
 
