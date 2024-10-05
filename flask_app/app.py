@@ -1,6 +1,7 @@
 # updated app.py
 
 from flask import Flask, render_template,request
+from flask_app.preprocessing_utility import normalize_text
 import mlflow
 import pickle
 import os
@@ -68,10 +69,14 @@ def normalize_text(text):
     return text
 
 
-# Set credentials for DagsHub
-dagshub_token = "2f6e1d24bc1480db80f0ea145a4c035cd96ae939"  # Replace with the actual token
+# Set up DagsHub credentials for MLflow tracking
+dagshub_token = os.getenv("DAGSHUB_PAT")
+if not dagshub_token:
+    raise EnvironmentError("DAGSHUB_PAT environment variable is not set")
+
 os.environ["MLFLOW_TRACKING_USERNAME"] = dagshub_token
 os.environ["MLFLOW_TRACKING_PASSWORD"] = dagshub_token
+
 
 
 
