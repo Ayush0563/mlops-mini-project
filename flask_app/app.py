@@ -1,7 +1,6 @@
 # updated app.py
 
 from flask import Flask, render_template,request
-from flask_app.preprocessing_utility import normalize_text
 import mlflow
 import pickle
 import os
