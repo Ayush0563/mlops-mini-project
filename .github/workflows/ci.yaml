@@ -7,13 +7,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: checkout code
+      # Step 1: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v3
-      - name: setup python
+
+      # Step 2: Setup Python Environment
+      - name: Setup Python
         uses: actions/setup-python@v2
         with:
           python-version: '3.10'
 
+      # Step 3: Cache pip dependencies
       - name: Cache pip dependencies
         uses: actions/cache@v3
         with:
@@ -22,70 +26,67 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: install dependencies
-        run:
-          pip install -r requirements.txt
+      # Step 4: Install dependencies
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-      - name: run pipeline
+      # Step 5: Run DVC pipeline
+      - name: Run pipeline
         env:
-          DAGSHUB_PAT: ${{ secrets.DAGSHUB_PAT }}
-        run:
-          dvc repro
+          DAGSHUB_PAT: "${{ secrets.DAGSHUB_PAT }}"
+        run: dvc repro
 
+      # Step 6: Run model tests
       - name: Run model tests
         env:
-          DAGSHUB_PAT: ${{ secrets.DAGSHUB_PAT }}
-        run: |
-          python -m unittest tests/test_model.py
+          DAGSHUB_PAT: "${{ secrets.DAGSHUB_PAT }}"
+        run: python -m unittest tests/test_model.py
 
-      
+      # Step 7: Promote model to production
       - name: Promote model to production
-        if: success()
         env:
-          DAGSHUB_PAT: ${{ secrets.DAGSHUB_PAT }}
+          DAGSHUB_PAT: "${{ secrets.DAGSHUB_PAT }}"
         run: python scripts/promote_model.py
 
+      # Step 8: Run Flask app tests
       - name: Run Flask app tests
-        if: success()
         env:
-          DAGSHUB_PAT: ${{ secrets.DAGSHUB_PAT }}
+          DAGSHUB_PAT: "${{ secrets.DAGSHUB_PAT }}"
         run: python -m unittest tests/test_flask_app.py
 
+      # Step 9: Login to AWS ECR
       - name: Login to AWS ECR
-        if: success()
         run: |
-          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY }}
-          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set aws_access_key_id "${{ secrets.AWS_ACCESS_KEY }}"
+          aws configure set aws_secret_access_key "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
           aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 396913707605.dkr.ecr.us-east-1.amazonaws.com
 
+      # Step 10: Build Docker image
       - name: Build Docker image
-        if: success()
-        run: |
-          docker build -t emotion_detection .
+        run: docker build -t emotion_detection .
 
+      # Step 11: Tag Docker image
       - name: Tag Docker image
-        if: success()
-        run: |
-         docker tag emotion_detection:latest 396913707605.dkr.ecr.us-east-1.amazonaws.com/emotion_detection:latest
+        run: docker tag emotion_detection:latest 396913707605.dkr.ecr.us-east-1.amazonaws.com/emotion_detection:latest
 
+      # Step 12: Push Docker image to AWS ECR
       - name: Push Docker image to AWS ECR
-        if: success()
-        run: |
-          docker push 396913707605.dkr.ecr.us-east-1.amazonaws.com/emotion_detection:latest
+        run: docker push 396913707605.dkr.ecr.us-east-1.amazonaws.com/emotion_detection:latest
 
+      # Step 13: Deploy to EC2
       - name: Deploy to EC2
-        if: success()
         uses: appleboy/ssh-action@v0.1.5
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: "${{ secrets.EC2_HOST }}"
+          username: "${{ secrets.EC2_USER }}"
+          key: "${{ secrets.EC2_SSH_KEY }}"
           script: |
-            aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY }}
-            aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            sudo apt-get update -y && sudo apt-get install -y awscli docker.io
+            aws configure set aws_access_key_id "${{ secrets.AWS_ACCESS_KEY }}"
+            aws configure set aws_secret_access_key "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
             aws configure set default.region us-east-1
             aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 396913707605.dkr.ecr.us-east-1.amazonaws.com
             docker pull 396913707605.dkr.ecr.us-east-1.amazonaws.com/emotion_detection:latest
-            docker stop my-app || true
-            docker rm my-app || true
-            docker run -d -p 80:5000 -e DAGSHUB_PAT=${{ secrets.DAGSHUB_PAT }} --name emotion-detect 396913707605.dkr.ecr.us-east-1.amazonaws.com/emotion_detection:latest
+            docker stop emotion-detect || true
+            docker rm emotion-detect || true
+            docker run -d -p 80:5000 -e DAGSHUB_PAT="${{ secrets.DAGSHUB_PAT }}" --name emotion-detect 396913707605.dkr.ecr.us-east-1.amazonaws.com/emotion_detection:latest
